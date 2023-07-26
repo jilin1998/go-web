@@ -1,6 +1,7 @@
 package gee
 
 import (
+	"html/template"
 	"log"
 	"net/http"
 	"path"
@@ -15,6 +16,9 @@ type Engine struct {
 	*RouterGroup //作为顶层分组
 	router       *router
 	groups       []*RouterGroup //存储所有的group
+
+	htmlTemplates *template.Template //html Temple
+	funcMap       template.FuncMap   //渲染html的render方法
 }
 
 // 分组结构
@@ -30,6 +34,13 @@ func New() *Engine {
 	engine := &Engine{router: newRouter()}
 	engine.RouterGroup = &RouterGroup{engine: engine}
 	engine.groups = []*RouterGroup{engine.RouterGroup}
+	return engine
+}
+
+// 默认包含日志和恢复中间件
+func Default() *Engine {
+	engine := New()
+	engine.Use(Logger(), Recovery())
 	return engine
 }
 
@@ -76,6 +87,7 @@ func (group *RouterGroup) Use(middlewares ...HandlerFunc) {
 
 // 转发规则
 func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+
 	//匹配中间件
 	var middlewares []HandlerFunc
 	//url处理，去掉重复的/
@@ -88,9 +100,10 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 	c := newContext(w, req)
+	//赋值给Context
+	c.engine = engine
 	c.handlers = middlewares
 	engine.router.handle(c)
-
 }
 
 // 创建静态资源handler,文件交给http库来处理
@@ -112,4 +125,14 @@ func (group *RouterGroup) Static(relativePath string, root string) {
 	handler := group.createStaticHandler(relativePath, http.Dir(root))
 	urlPath := path.Join(relativePath, "/*filepath")
 	group.GET(urlPath, handler)
+}
+
+// 添加渲染方法
+func (engine *Engine) SetFuncMap(funcMap template.FuncMap) {
+	engine.funcMap = funcMap
+}
+
+// 加载html模板
+func (engine *Engine) LoadHTMLGlob(pattern string) {
+	engine.htmlTemplates = template.Must(template.New("").Funcs(engine.funcMap).ParseGlob(pattern))
 }

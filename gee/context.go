@@ -21,6 +21,9 @@ type Context struct {
 	//中间件
 	handlers []HandlerFunc
 	index    int
+
+	//engine pointer
+	engine *Engine
 }
 
 // 实例化一个新的Context
@@ -95,15 +98,17 @@ func (c *Context) Data(code int, data []byte) {
 	c.Wraiter.Write(data)
 }
 
-// 返回html
-func (c *Context) HTML(code int, html string) {
-	c.SetHeader("Content-Type", "text/html")
-	c.Status(code)
-	c.Wraiter.Write([]byte(html))
-}
-
-// 直接结素，跳过后续中间件
+// 直接结束，跳过后续中间件
 func (c *Context) Fail(code int, err string) {
 	c.index = len(c.handlers)
 	c.JSON(code, H{"message": err})
+}
+
+// 返回html
+func (c *Context) HTML(code int, name string, data interface{}) {
+	c.SetHeader("Content-Type", "text/html")
+	c.Status(code)
+	if err := c.engine.htmlTemplates.ExecuteTemplate(c.Wraiter, name, data); err != nil {
+		c.Fail(500, err.Error())
+	}
 }
